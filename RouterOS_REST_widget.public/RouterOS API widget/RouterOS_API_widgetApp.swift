@@ -1,6 +1,15 @@
-// writed by hkphh
+// written by hkphh
 
 import SwiftUI
+
+// Mikrotik ip-address
+
+let routerIp: String = "192.168.0.254"
+
+// Base64 user:pass string
+// if u decode base64 "YWRtaW46cGFzc3dvcmQ=" string u will get "stepa:password" string
+
+let credBase64: String = "YWRtaW46cGFzc3dvcmQ="
 
 @main
 struct YourApp: App {
@@ -15,10 +24,11 @@ struct YourApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
+    var domainTextField: NSTextField?
 
-// here u can change widget icon
-// search some "macos sf symbols swift"
-
+    // here u can change widget icon
+    // search some "macos sf symbols swift"
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
@@ -29,78 +39,96 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showMenu() {
         let menu = NSMenu()
-
-// Every item here is a unique button
-// If u wanna add some new, also dont forget to add new objc sendHTTPRequest[num]
-
+        
+        // Every item here is a unique button
+        // If u wanna add some new, also dont forget to add new objc sendHTTPRequest[num]
+        
         menu.addItem(NSMenuItem(title: "Enable VPN", action: #selector(sendHTTPRequest1), keyEquivalent: "1"))
         menu.addItem(NSMenuItem(title: "Disable VPN", action: #selector(sendHTTPRequest2), keyEquivalent: "2"))
-//Test        menu.addItem(NSMenuItem(title: "Test", action: #selector(sendHTTPRequest3), keyEquivalent: "3"))
+        menu.addItem(NSMenuItem.separator())
+
+        let domainItem = NSMenuItem()
+        let domainView = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 25))
         
+        domainTextField = NSTextField(frame: NSRect(x: 10, y: 0, width: 140, height: 24))
+        domainTextField?.placeholderString = "Add domain here"
+        domainView.addSubview(domainTextField!)
+        
+        let addButton = NSButton(title: "Add", target: self, action: #selector(addDomainToVPN))
+        addButton.frame = NSRect(x: 150, y: 0, width: 50, height: 20)
+        domainView.addSubview(addButton)
+        
+        domainItem.view = domainView
+        menu.addItem(domainItem)
+
         statusItem?.menu = menu
         statusItem?.button?.performClick(nil)  // Show the menu immediately
     }
 
-// Replace 127.0.0.1 with your Mikrotik address
-// Also change numbers key (4 in jsonBody) with your rule number
-// HTTP (not HTTPS) requires NSExceptionAllowsInsecureHTTPLoads key in Info.plist
-
+    // Also change jsonBody with your rule number or anything else
+    // HTTP (not HTTPS) requires NSExceptionAllowsInsecureHTTPLoads key in Info.plist
+    
     @objc func sendHTTPRequest1() {
         let jsonBody: [String: Any] = ["numbers": "4"]
-        sendHTTPRequest(endpoint: "http://127.0.0.1/rest/ip/firewall/mangle/enable", jsonBody: jsonBody)
+        sendHTTPRequest(endpoint: "http://\(routerIp)/rest/ip/firewall/mangle/enable", jsonBody: jsonBody, method: "POST")
     }
-
-// Replace 127.0.0.1 with your Mikrotik address
-// Also change numbers key (4 in jsonBody) with your rule number
-// HTTP (not HTTPS) requires NSExceptionAllowsInsecureHTTPLoads key in Info.plist
 
     @objc func sendHTTPRequest2() {
         let jsonBody: [String: Any] = ["numbers": "4"]
-        sendHTTPRequest(endpoint: "http://127.0.0.1/rest/ip/firewall/mangle/disable", jsonBody: jsonBody)
+        sendHTTPRequest(endpoint: "http://\(routerIp)/rest/ip/firewall/mangle/disable", jsonBody: jsonBody, method: "POST")
     }
 
-// Test button
-//    @objc func sendHTTPRequest3() {
-//        let jsonBody: [String: Any] = ["numbers": "5"]
-//        sendHTTPRequest(endpoint: "http://127.0.0.1:8080", jsonBody: jsonBody)
-//    }
+    @objc func addDomainToVPN() {
+        guard let domain = domainTextField?.stringValue, !domain.isEmpty else {
+//            print("Domain field is empty")
+            return
+        }
+        let jsonBody: [String: Any] = ["address": domain, "list": "AL-VPN"]
+        sendHTTPRequest(endpoint: "http://\(routerIp)/rest/ip/firewall/address-list", jsonBody: jsonBody, method: "PUT")
+        
+        // Clear text field after button click
+        domainTextField?.stringValue = ""
+    }
     
-    func sendHTTPRequest(endpoint: String, jsonBody: [String: Any]) {
+    func sendHTTPRequest(endpoint: String, jsonBody: [String: Any], method: String) {
         guard let url = URL(string: endpoint) else {
 //            print("Invalid URL")
             return
         }
 
-// here we announce http headers
-// in Authorization header we should insert base64 encoded login pass from ur MikroTik in login:pass format
-// if u decode base64 "YWRtaW46cGFzc3dvcmQ=" string u will get "stepa:password" string
-
+        // here we announce http headers
+        // in Authorization header we should insert base64 encoded login & pass from ur MikroTik in login:pass format
+        // if u decode base64 "YWRtaW46cGFzc3dvcmQ=" string u will get "stepa:password" string
+        // var credBase64 located upper
+        
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Basic c3RlcGE6cGFzc3dvcmQ=", forHTTPHeaderField: "Authorization")
+        request.addValue("Basic \(credBase64)", forHTTPHeaderField: "Authorization")
 
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: jsonBody, options: [])
             request.httpBody = jsonData
         } catch {
- //           print("Failed to encode JSON: \(error)")
+//            print("Failed to encode JSON: \(error)")
             return
         }
 
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {
- //               print("Error: \(error)")
+//                print("Error: \(error)")
                 return
             }
+            
             if let response = response as? HTTPURLResponse {
- //               print("Response Code: \(response.statusCode)")
+//                print("Response Code: \(response.statusCode)")
             }
             if let data = data {
- //               print("Data: \(String(data: data, encoding: .utf8) ?? "No data")")
+//                print("Data: \(String(data: data, encoding: .utf8) ?? "No data")")
             }
         }
 
         task.resume()
     }
 }
+
